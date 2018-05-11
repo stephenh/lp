@@ -7,8 +7,8 @@ import java.time.Instant
 
 object Main {
   def main(args: Array[String]): Unit = {
-    if (args == Array("-h")) {
-      println("Usage: ./example [timeout-in-seconds]")
+    if (args.toList == List("-h")) {
+      println("Usage: ./run.sh [timeout-in-seconds]")
       sys.exit(1)
     }
     
