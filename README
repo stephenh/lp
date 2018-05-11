@@ -1,0 +1,4 @@
+
+Build: `./gradlew shadowJar`.
+
+Running: `./run.sh -h`

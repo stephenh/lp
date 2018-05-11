@@ -2,9 +2,6 @@
 
 set -e
 
-# Shadow jar isn't really needed, but it's a cheap way to get jars into one place
-./gradlew shadowJar
-
 MAIN=leapfin.Main
 JAR=leapfin-example-all.jar
 
