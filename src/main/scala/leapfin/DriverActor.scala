@@ -3,6 +3,7 @@ package leapfin
 import akka.actor.Actor
 import akka.actor.Props
 import akka.event.Logging
+import java.time.Duration
 
 class DriverActor extends Actor {
 
@@ -12,10 +13,11 @@ class DriverActor extends Actor {
     context.actorOf(Props[WorkerActor], name = s"worker-${i}")
   }
   private val results = scala.collection.mutable.Buffer[WorkDone]()
-
+  private var duration: Duration = null
   
   override def receive = {
     case StartDriver(now, expiration) =>
+      this.duration = Duration.between(now, expiration)
       children.foreach { ref =>
         // For now going to trust WorkerActor to respect the timeout; could
         // add scheduled messages to check-in on it and kill/return if needed
@@ -25,25 +27,31 @@ class DriverActor extends Actor {
     case m @ WorkDone(status, timeTaken, bytesRead) =>
       results += m
       if (results.size == children.size) {
-        printResults()
+        // Still haven't read about akka testing, so extracting to an object for testing
+        println(DriverActor.printResults(results, duration).mkString("\n"))
         context.system.terminate()
       }
     case m =>
       log.info(s"Unknown message ${m}")
   }
-  
-  private def printResults(): Unit = {
+}
+
+object DriverActor {
+  def printResults(results: Seq[WorkDone], duration: Duration): Seq[String] = {
     // Output in descending order, which means longest ones first
-    results.sortBy(_.timeTaken)(Ordering[Long].reverse).foreach { r => 
+    val lines = results.sortBy(_.timeTaken)(Ordering[Long].reverse).map { r => 
       if (r.status == "SUCCESS") {
-        println(r) // Just print the whole message, which is lazy to "to spec"
+        s"SUCCESS took ${r.timeTaken} millis read ${r.bytesRead} bytes"
       } else {
         // TODO haven't captured the error/stack trace, but would go to stderr
-        println(r.status) // Only print TIMEOUT or FAILURE
+        r.status
       }
     }
-    // TODO Need a final line:
-    //  A final line of output will show the average bytes read per time unit in a time unit of your choice where failed/timeout workers will not report stats. 11 lines of output total to stdout.
+    val successBytes = results.filter(_.status == "SUCCESS").map(_.bytesRead).sum
+    val successTime = results.filter(_.status == "SUCCESS").map(_.timeTaken).sum
+    val seconds = Duration.ofMillis(successTime).getSeconds
+    val successBytesPerSec = if (seconds == 0) "N/A" else successBytes.toDouble / seconds
+    lines ++ Seq(s"Average success bytes/second ${successBytesPerSec}")
   }
   
 }
