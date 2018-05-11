@@ -2,45 +2,60 @@ package leapfin
 
 import akka.actor.Actor
 import akka.event.Logging
-import scala.util.Random
-import java.time.Instant
+import java.time.Clock
+import scala.util.{ Failure, Random, Success }
+import java.time.Duration
 
 object WorkerActor {
   val matchString = "Lpfn"
 }
 
+/**
+ * Scans a random stream for the characters Lpfn.
+ *
+ * Currently blocks the actor thread while looking.
+ * 
+ * It's not super-kosher to block an actor, as we can't receive any
+ * messages while doing so. So we could have this worker actor spin up
+ * a thread dedicated to reading the random bytes, but not managing
+ * threads is a perk of Akka, and our current specs don't require any
+ * other driver messages once we start searching, so I'm going to just
+ * this for now.
+ * 
+ * As long as akka system was >10 threads, should be fine.
+ */
 class WorkerActor extends Actor {
 
   private val log = Logging(context.system, this)
-  private val stream = new CountingStream(Random.alphanumeric)
+  // TODO: Accept clock via constructor for testing
+  private val clock = Clock.systemUTC()
+  // TODO: Accept a random source stream via constructor so non-random source
+  // streams can be passed in for deterministic unit tests.
+  private val random = Random.alphanumeric
 
   override def receive = {
     case StartWork(start, expiration) =>
-      // It's not super-kosher to block in an actor, so we could have this
-      // worker actor spin up a thread dedicated to reading the random bytes,
-      // but given we don't need to listen to any more messages from our driver
-      // until we're done, I'm going to just block this for now. As long as
-      // akka system was >10 threads, should be fine.
+      // Creating a stream of random chars that is:
+      // a) Counted so we remember how many raw chars we took
+      // b) Sliding so we see groups of 4 at a time
+      // c) Timed, so we start getting Failure after expiration has past
+      val counted = new CountingStream(random)
+      val words = counted.stream.sliding(WorkerActor.matchString.length).map { chars => new String(chars.toArray) }
+      val timed = TimedStream.readUntilExpired(words.toStream, clock, expiration)
 
-      // TODO: Replace the now with something more functional.
-      // TODO: Use a clock so we are more testeable. Haven't done Akka before so need to google DI.
-      val words = stream.stream.sliding(WorkerActor.matchString.length)
-      // Doing Stream.find(word) would be nice, but not sure how to make it check the time
-      // after every word. Oh. Could have a timed stream. That would be cute. TODO.
-      var found = false
-      do {
-        val word = new String(words.next().toArray)
-        if (word == WorkerActor.matchString) {
-          found = true
-        }
-      } while (Instant.now().isBefore(expiration) && !found)
+      // Now keep looking (blocking) until we find what we want or timeout
+      val result = timed.find {
+        case Success(WorkerActor.matchString) => true // found it
+        case Failure(e) => true // timed out
+        case Success(_) => false // keep looking
+      }
+
       // Reply
+      val found = result == Some(Success(WorkerActor.matchString))
+      // TODO Research how akka handles exceptions in our receive block, a big try/catch seems naive?
       val status = if (found) "SUCCESS" else "TIMEOUT"
-      val duration = Instant.now().toEpochMilli() - start.toEpochMilli();
-      // Going to report time taken/bytesRead and let driver ignore it
-      sender() ! WorkDone(status, duration, stream.read)
-    // TODO Research how akka handles exceptions in our receive block,
-    // e.g. the parent? someone is notified.
+      val duration = Duration.between(start, clock.instant()).toMillis()
+      sender() ! WorkDone(status, duration, counted.read)
     case m =>
       log.info(s"Unknown message ${m}")
   }

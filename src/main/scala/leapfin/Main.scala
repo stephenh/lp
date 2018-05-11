@@ -11,14 +11,14 @@ object Main {
       println("Usage: ./run.sh [timeout-in-seconds]")
       sys.exit(1)
     }
-    
+
     // Pretty naive arg parsing
     val duration = if (args.isEmpty) Duration.ofSeconds(60) else Duration.ofSeconds(args(0).toLong)
 
     // TODO Add config to ensure we have 11 threads (see caveat in WorkerActor that they
     // currently block, which is okay? Not sure yet.). I think the default threads is 10.
     val system = ActorSystem("leapfin")
-    
+
     // TODO use a clock
     val now = Instant.now()
     val expiration = now.plus(duration)
