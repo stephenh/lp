@@ -24,7 +24,7 @@ object Main2 {
         try {
           val random = new Random()
           var found = false
-          var read = 0
+          var read = 0L
           val start = System.currentTimeMillis
           val data = new Array[Int](search.length)
           val thread = Thread.currentThread
