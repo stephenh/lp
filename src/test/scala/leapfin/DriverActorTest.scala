@@ -39,7 +39,7 @@ class DriverActorTest extends FunSuite with Matchers {
         "Average success bytes/second 1.0"))
   }
   
-  private def printResults(work: Seq[WorkDone], duration: Duration = durationOneSecond): Seq[String] = {
-    DriverActor.printResults(work, duration)
+  private def printResults(work: Seq[WorkDone]): Seq[String] = {
+    DriverActor.printResults(work)
   }
 }

@@ -13,11 +13,9 @@ class DriverActor extends Actor {
     context.actorOf(Props[WorkerActor], name = s"worker-${i}")
   }
   private val results = scala.collection.mutable.Buffer[WorkDone]()
-  private var duration: Duration = null
   
   override def receive = {
     case StartDriver(now, expiration) =>
-      this.duration = Duration.between(now, expiration)
       children.foreach { ref =>
         // For now going to trust WorkerActor to respect the timeout; could
         // add scheduled messages to check-in on it and kill/return if needed
@@ -28,7 +26,7 @@ class DriverActor extends Actor {
       results += m
       if (results.size == children.size) {
         // Still haven't read about akka testing, so extracting to an object for testing
-        println(DriverActor.printResults(results, duration).mkString("\n"))
+        println(DriverActor.printResults(results).mkString("\n"))
         context.system.terminate()
       }
     case m =>
@@ -37,7 +35,7 @@ class DriverActor extends Actor {
 }
 
 object DriverActor {
-  def printResults(results: Seq[WorkDone], duration: Duration): Seq[String] = {
+  def printResults(results: Seq[WorkDone]): Seq[String] = {
     // Output in descending order, which means longest ones first
     val lines = results.sortBy(_.timeTaken)(Ordering[Long].reverse).map { r => 
       if (r.status == "SUCCESS") {
@@ -53,5 +51,4 @@ object DriverActor {
     val successBytesPerSec = if (seconds == 0) "N/A" else successBytes.toDouble / seconds
     lines ++ Seq(s"Average success bytes/second ${successBytesPerSec}")
   }
-  
 }
