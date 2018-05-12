@@ -21,7 +21,7 @@ object Main2 {
         // Bizarre, but Random.alphanumeric.take(1).head was not advancing the stream for me,
         // so fallback on alphanumeric's chars[nextInt & chars.length] approach.
         private val random = new Random()
-        private val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" 
+        private val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
         override def run(): Unit = {
           try {
             var found = false
@@ -50,16 +50,21 @@ object Main2 {
       })
     }
 
-    val cancelRemaining = new Runnable() {
-      override def run(): Unit = futures.foreach(_.cancel(true))
+    val cancelRemaining = {
+      threadPool.schedule(
+        new Runnable() {
+          override def run(): Unit = futures.foreach(_.cancel(true))
+        },
+        duration.toMillis,
+        TimeUnit.MILLISECONDS)
     }
-    val cancelFuture = threadPool.schedule(cancelRemaining, duration.toMillis, TimeUnit.MILLISECONDS)
 
     done.await()
-    cancelFuture.cancel(true)
+    cancelRemaining.cancel(true)
 
     val lines = DriverActor.printResults(results.asScala.toIndexedSeq)
     println(lines.mkString("\n"))
+
     threadPool.shutdown()
   }
 }
